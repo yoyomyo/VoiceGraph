@@ -1,6 +1,7 @@
 package com.yoyomyo.voicegraph;
 
 import android.Manifest;
+import android.content.DialogInterface;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -10,6 +11,7 @@ import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -19,6 +21,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -109,8 +112,14 @@ public class MainActivity extends AppCompatActivity {
         }
         File dir = Environment.getExternalStorageDirectory();
         recordingListAdapter.audioFiles  = Util.getAudioFiles(dir);
-        recordingList.setAdapter(recordingListAdapter);
-        recordingCount = recordingListAdapter.getItemCount() + 1;
+        if (recordingList.getAdapter() == null) {
+            // recyclerview creation
+            recordingList.setAdapter(recordingListAdapter);
+            recordingCount = recordingListAdapter.getItemCount() + 1;
+        } else {
+            // adapter is already binded
+            recordingListAdapter.notifyDataSetChanged();
+        }
     }
 
     private void startRecording() {
@@ -163,45 +172,81 @@ public class MainActivity extends AppCompatActivity {
         }
 
         public void bindData(final File file) {
+            final PlayingAsyncTask task = new PlayingAsyncTask(file);
             fileName.setText(file.getName());
-
             fileName.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
                     // play audio
-                    playAudio(file);
+                    task.execute();
+                }
+            });
+            fileName.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View view) {
+                    // Are you sure to delete file dialog
+                    AlertDialog dialog = confirmFileDeletion(file);
+                    dialog.show();
+                    return true;
                 }
             });
         }
     }
 
-    private void playAudio(File file) {
-        int frequency = 11025/2;
-        int channelConfig = AudioFormat.CHANNEL_CONFIGURATION_MONO;
-        int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
+    public class PlayingAsyncTask extends AsyncTask<Void, Void, Void> {
 
-        int audioLength = (int) (file.length() / 2);
-        short[] audio = new short[audioLength];
+        File audioFile;
 
-        try{
-            InputStream is = new FileInputStream(file);
-            BufferedInputStream bis = new BufferedInputStream(is);
-            DataInputStream dis = new DataInputStream(bis);
+        public PlayingAsyncTask(File file) {
+            audioFile = file;
+        }
 
-            int i = 0;
-            while(dis.available() > 0) {
-                audio[i] = dis.readShort();
-                i++;
+        @Override
+        protected Void doInBackground(Void... voids) {
+            // TODO: show a dialog of waveform recorded
+            playAudio(audioFile);
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+            Log.d(LOG_TAG, "finished playing audio");
+        }
+
+        
+
+        private void playAudio(File file) {
+            int channelConfig = AudioFormat.CHANNEL_CONFIGURATION_MONO;
+            int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
+
+            int audioLength = (int) (file.length() / 2);
+            short[] audio = new short[audioLength];
+
+            try{
+                InputStream is = new FileInputStream(file);
+                BufferedInputStream bis = new BufferedInputStream(is);
+                DataInputStream dis = new DataInputStream(bis);
+
+                int i = 0;
+                while(dis.available() > 0) {
+                    audio[i] = dis.readShort();
+                    i++;
+                }
+
+                // Close the input stream
+                dis.close();
+
+                AudioTrack audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, RECORDER_SAMPLERATE, channelConfig, audioEncoding, audioLength, AudioTrack.MODE_STREAM);
+                audioTrack.play();
+                audioTrack.write(audio, 0, audioLength);
+
+                // read short in background, put short in AudioTrack, and play
+
+                // display the graph in the foreground
+            } catch (Throwable e) {
+                Log.e(LOG_TAG, "An error occured during playback", e);
             }
-
-            // Close the input stream
-            dis.close();
-
-            AudioTrack audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, frequency, channelConfig, audioEncoding, audioLength, AudioTrack.MODE_STREAM);
-            audioTrack.play();
-            audioTrack.write(audio, 0, audioLength);
-        } catch (Throwable e) {
-            Log.e(LOG_TAG, "An error occured during playback", e);
         }
     }
 
@@ -209,6 +254,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         protected Void doInBackground(Void... voids) {
+            // TODO: show a dialog of waveform recorded
             startRecordingAsync();
             return null;
         }
@@ -249,6 +295,29 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(LOG_TAG, "An error occured during recording: " + e.toString());
             }
         }
+    }
+
+    private AlertDialog confirmFileDeletion(final File file) {
+        final String fileName = file.getName();
+        final AlertDialog deleteDialog = new AlertDialog.Builder(this)
+                .setTitle("Delete")
+                .setMessage("Are you sure that you want to delete " + file.getName() + "?")
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        file.delete();
+                        Toast.makeText(MainActivity.this, fileName + " is deleted", Toast.LENGTH_SHORT).show();
+                        populateRecordingList();
+                    }
+                })
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int i) {
+                        dialog.dismiss();
+                    }
+                })
+                .create();
+        return deleteDialog;
     }
 
 }
