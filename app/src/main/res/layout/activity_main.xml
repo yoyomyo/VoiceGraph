@@ -6,9 +6,17 @@
     android:layout_height="match_parent"
     tools:context="com.yoyomyo.voicegraph.MainActivity">
 
+    <com.yoyomyo.voicegraph.WaveView
+        android:id="@+id/wave"
+        android:background="@color/Black"
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:layout_margin="10dp" />
+
     <android.support.v7.widget.RecyclerView
         android:id="@+id/recordingList"
         android:layout_width="match_parent"
+        android:layout_below="@id/wave"
         android:layout_above="@+id/buttonsWrapper"
         android:layout_height="match_parent" />
 

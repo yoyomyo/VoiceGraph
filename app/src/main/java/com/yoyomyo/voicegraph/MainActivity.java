@@ -23,6 +23,8 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.maxproj.simplewaveform.SimpleWaveform;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -33,8 +35,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Observable;
+
+import io.reactivex.ObservableSource;
+import io.reactivex.Observer;
+import io.reactivex.disposables.Disposable;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -51,7 +59,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recordingList;
     private RecordingListAdpater recordingListAdapter;
     private RecordingAsyncTask task;
-
+    private WaveView waveView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,6 +73,9 @@ public class MainActivity extends AppCompatActivity {
         llm.setOrientation(LinearLayoutManager.VERTICAL);
         recordingList.setLayoutManager(llm);
         populateRecordingList();
+
+
+        waveView = findViewById(R.id.wave);
     }
 
     private void setRecordingActions() {
@@ -106,12 +117,16 @@ public class MainActivity extends AppCompatActivity {
         return file;
     }
 
+    private List<File> getAudioFiles() {
+        File dir = Environment.getExternalStorageDirectory();
+        return Util.getAudioFiles(dir);
+    }
+
     private void populateRecordingList() {
         if (recordingListAdapter == null) {
             recordingListAdapter = new RecordingListAdpater();
         }
-        File dir = Environment.getExternalStorageDirectory();
-        recordingListAdapter.audioFiles  = Util.getAudioFiles(dir);
+        recordingListAdapter.audioFiles  = getAudioFiles();
         if (recordingList.getAdapter() == null) {
             // recyclerview creation
             recordingList.setAdapter(recordingListAdapter);
@@ -177,7 +192,9 @@ public class MainActivity extends AppCompatActivity {
             fileName.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    // play audio
+                    if (task.getStatus() == AsyncTask.Status.RUNNING) {
+                        return;
+                    }
                     task.execute();
                 }
             });
@@ -196,9 +213,11 @@ public class MainActivity extends AppCompatActivity {
     public class PlayingAsyncTask extends AsyncTask<Void, Void, Void> {
 
         File audioFile;
+        float[] audioData;
 
         public PlayingAsyncTask(File file) {
             audioFile = file;
+            audioData = new float[(int) audioFile.length()];
         }
 
         @Override
@@ -209,14 +228,18 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
+        protected void onProgressUpdate(Void... progress) {
+            // draw something on the screen
+        }
+
+        @Override
         protected void onPostExecute(Void aVoid) {
             super.onPostExecute(aVoid);
             Log.d(LOG_TAG, "finished playing audio");
+            waveView.setData(audioData);
         }
 
-        
-
-        private void playAudio(File file) {
+        public void playAudio(File file) {
             int channelConfig = AudioFormat.CHANNEL_CONFIGURATION_MONO;
             int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
 
@@ -231,25 +254,24 @@ public class MainActivity extends AppCompatActivity {
                 int i = 0;
                 while(dis.available() > 0) {
                     audio[i] = dis.readShort();
+                    audioData[i] = (float) audio[i];
                     i++;
                 }
 
                 // Close the input stream
                 dis.close();
 
+                // read short in background, put short in AudioTrack, and play
                 AudioTrack audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, RECORDER_SAMPLERATE, channelConfig, audioEncoding, audioLength, AudioTrack.MODE_STREAM);
                 audioTrack.play();
                 audioTrack.write(audio, 0, audioLength);
-
-                // read short in background, put short in AudioTrack, and play
-
                 // display the graph in the foreground
             } catch (Throwable e) {
                 Log.e(LOG_TAG, "An error occured during playback", e);
             }
         }
-    }
 
+    }
     public class RecordingAsyncTask extends AsyncTask<Void, Void, Void> {
 
         @Override
@@ -295,8 +317,8 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(LOG_TAG, "An error occured during recording: " + e.toString());
             }
         }
-    }
 
+    }
     private AlertDialog confirmFileDeletion(final File file) {
         final String fileName = file.getName();
         final AlertDialog deleteDialog = new AlertDialog.Builder(this)
