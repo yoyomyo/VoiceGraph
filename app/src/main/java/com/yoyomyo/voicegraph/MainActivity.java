@@ -8,9 +8,11 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
+import android.media.PlaybackParams;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
@@ -22,8 +24,6 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import com.maxproj.simplewaveform.SimpleWaveform;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -39,6 +39,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Observable;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import io.reactivex.ObservableSource;
 import io.reactivex.Observer;
@@ -187,14 +189,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         public void bindData(final File file) {
-            final PlayingAsyncTask task = new PlayingAsyncTask(file);
             fileName.setText(file.getName());
             fileName.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    if (task.getStatus() == AsyncTask.Status.RUNNING) {
-                        return;
-                    }
+                    final PlayingAsyncTask task = new PlayingAsyncTask(file);
                     task.execute();
                 }
             });
@@ -210,73 +209,86 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public class PlayingAsyncTask extends AsyncTask<Void, Void, Void> {
+
+
+    public class PlayingAsyncTask extends AsyncTask<Void, Integer, Void> {
 
         File audioFile;
-        float[] audioData;
+        int audioLength;
+        short[] audio;
+        Timer playbackTimer;
+        int progress;
 
         public PlayingAsyncTask(File file) {
             audioFile = file;
-            audioData = new float[(int) audioFile.length()];
+            playbackTimer = new Timer();
         }
 
         @Override
         protected Void doInBackground(Void... voids) {
-            // TODO: show a dialog of waveform recorded
-            playAudio(audioFile);
+            Log.d("Yun", "progress: " + progress);
+            readFile(audioFile);
+            waveView.setData(audio);
+            playAudio();
             return null;
         }
 
         @Override
-        protected void onProgressUpdate(Void... progress) {
+        protected void onProgressUpdate(Integer... progress) {
             // draw something on the screen
+            Log.d("Yun", "progress: " + progress[0]);
+            //waveView.setProgress(progress[0] * 200);
         }
 
-        @Override
-        protected void onPostExecute(Void aVoid) {
-            super.onPostExecute(aVoid);
-            Log.d(LOG_TAG, "finished playing audio");
-            waveView.setData(audioData);
-        }
+        public void readFile(File file) {
+            audioLength = (int) (file.length() / 2);
+            audio = new short[audioLength];
+            Log.d("Yun", "audioLength in sec: " + ((float) audioLength / RECORDER_SAMPLERATE));
 
-        public void playAudio(File file) {
-            int channelConfig = AudioFormat.CHANNEL_CONFIGURATION_MONO;
-            int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
-
-            int audioLength = (int) (file.length() / 2);
-            short[] audio = new short[audioLength];
-
-            try{
+            try {
                 InputStream is = new FileInputStream(file);
                 BufferedInputStream bis = new BufferedInputStream(is);
                 DataInputStream dis = new DataInputStream(bis);
 
                 int i = 0;
-                while(dis.available() > 0) {
+                while (dis.available() > 0) {
                     audio[i] = dis.readShort();
-                    audioData[i] = (float) audio[i];
                     i++;
                 }
 
                 // Close the input stream
                 dis.close();
 
-                // read short in background, put short in AudioTrack, and play
-                AudioTrack audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, RECORDER_SAMPLERATE, channelConfig, audioEncoding, audioLength, AudioTrack.MODE_STREAM);
-                audioTrack.play();
-                audioTrack.write(audio, 0, audioLength);
-                // display the graph in the foreground
             } catch (Throwable e) {
                 Log.e(LOG_TAG, "An error occured during playback", e);
             }
         }
 
+        public void playAudio() {
+            int channelConfig = AudioFormat.CHANNEL_CONFIGURATION_MONO;
+            int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
+
+            final int audioLength = (int) (audioFile.length() / 2);
+
+            try{
+                // read short in background, put short in AudioTrack, and play
+                final AudioTrack audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, RECORDER_SAMPLERATE, channelConfig, audioEncoding, audioLength, AudioTrack.MODE_STREAM);
+                audioTrack.setPlaybackRate(RECORDER_SAMPLERATE);
+
+                audioTrack.play();
+                audioTrack.write(audio, 0, audioLength);
+            } catch (Throwable e) {
+                Log.e(LOG_TAG, "An error occured during playback", e);
+            }
+        }
+
+
     }
+
     public class RecordingAsyncTask extends AsyncTask<Void, Void, Void> {
 
         @Override
         protected Void doInBackground(Void... voids) {
-            // TODO: show a dialog of waveform recorded
             startRecordingAsync();
             return null;
         }

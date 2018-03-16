@@ -2,12 +2,14 @@ package com.yoyomyo.voicegraph;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
-
-import java.util.LinkedList;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.LinearInterpolator;
+import android.view.animation.TranslateAnimation;
 
 /**
  * Takes in a list of short and draw them on canvas
@@ -15,30 +17,37 @@ import java.util.LinkedList;
 
 public class WaveView extends View {
 
-    public float[] data;
-    private int width;
-    private int height;
+    private short[] data;
+
+    long startTime;
+    long animationDuration;
+    Matrix matrix = new Matrix(); // transformation matrix
+    int progress = 0;
 
     public WaveView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
-        //setData();
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        width = widthMeasureSpec;
-        height = heightMeasureSpec;
     }
 
-    public void setData(float[] data) {
+    public void setData(short[] data) {
         this.data = data;
-        invalidate();
+        // start the animation:
+        this.startTime = System.currentTimeMillis();
+
+        this.animationDuration = data.length/11025 * 1000;
+
+        this.postInvalidate();
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+
+        long elapsedTime = System.currentTimeMillis() - startTime;
 
         if (data == null || data.length == 0) {
             return;
@@ -47,9 +56,20 @@ public class WaveView extends View {
         Paint myPaint = new Paint();
         myPaint.setColor(getResources().getColor(R.color.colorAccent));
 
-        for (int i =0; i < data.length -1 ; i++) {
-            //android.util.Log.d("Yun", i + " : " + data[i]);
-            canvas.drawLine((float)i, data[i] + 200, (float) i + 1, data[i+1] + 200, myPaint);
+
+        matrix.postTranslate(- 10*elapsedTime/1000, 0); // move 10 pixels to the right
+        // other transformations...
+
+        canvas.concat(matrix);        // call this before drawing on the canvas!!
+
+        int verticalOffset = canvas.getHeight()/2;
+
+        for (int i = 0; i < data.length -1 ; i++) {
+            canvas.drawLine((float)i, data[i] + verticalOffset,
+                    (float) i + 1, data[i+1] + verticalOffset, myPaint);
         }
+
+        if (elapsedTime < animationDuration)
+            this.postInvalidateDelayed( 1000 / 60);
     }
 }
