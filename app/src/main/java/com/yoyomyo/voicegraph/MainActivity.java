@@ -6,13 +6,10 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
-import android.media.MediaPlayer;
 import android.media.MediaRecorder;
-import android.media.PlaybackParams;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.Handler;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
@@ -35,21 +32,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Observable;
-import java.util.Timer;
-import java.util.TimerTask;
 
-import io.reactivex.ObservableSource;
-import io.reactivex.Observer;
-import io.reactivex.disposables.Disposable;
 
 public class MainActivity extends AppCompatActivity {
 
+    public static final int RECORDER_SAMPLERATE = 11025;
     private static final String LOG_TAG = MainActivity.class.getSimpleName();
-    private static final int RECORDER_SAMPLERATE = 11025;
     private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_MONO;
     private static final int RECORDER_AUDIO_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 
@@ -75,7 +65,6 @@ public class MainActivity extends AppCompatActivity {
         llm.setOrientation(LinearLayoutManager.VERTICAL);
         recordingList.setLayoutManager(llm);
         populateRecordingList();
-
 
         waveView = findViewById(R.id.wave);
     }
@@ -209,41 +198,27 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
-
     public class PlayingAsyncTask extends AsyncTask<Void, Integer, Void> {
 
         File audioFile;
         int audioLength;
         short[] audio;
-        Timer playbackTimer;
-        int progress;
 
         public PlayingAsyncTask(File file) {
             audioFile = file;
-            playbackTimer = new Timer();
         }
 
         @Override
         protected Void doInBackground(Void... voids) {
-            Log.d("Yun", "progress: " + progress);
             readFile(audioFile);
             waveView.setData(audio);
             playAudio();
             return null;
         }
 
-        @Override
-        protected void onProgressUpdate(Integer... progress) {
-            // draw something on the screen
-            Log.d("Yun", "progress: " + progress[0]);
-            //waveView.setProgress(progress[0] * 200);
-        }
-
         public void readFile(File file) {
             audioLength = (int) (file.length() / 2);
             audio = new short[audioLength];
-            Log.d("Yun", "audioLength in sec: " + ((float) audioLength / RECORDER_SAMPLERATE));
 
             try {
                 InputStream is = new FileInputStream(file);
@@ -274,15 +249,12 @@ public class MainActivity extends AppCompatActivity {
                 // read short in background, put short in AudioTrack, and play
                 final AudioTrack audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, RECORDER_SAMPLERATE, channelConfig, audioEncoding, audioLength, AudioTrack.MODE_STREAM);
                 audioTrack.setPlaybackRate(RECORDER_SAMPLERATE);
-
                 audioTrack.play();
                 audioTrack.write(audio, 0, audioLength);
             } catch (Throwable e) {
                 Log.e(LOG_TAG, "An error occured during playback", e);
             }
         }
-
-
     }
 
     public class RecordingAsyncTask extends AsyncTask<Void, Void, Void> {
@@ -298,7 +270,6 @@ public class MainActivity extends AppCompatActivity {
             super.onPostExecute(aVoid);
             // update the recycler view
             populateRecordingList();
-
         }
 
         private void startRecordingAsync() {
